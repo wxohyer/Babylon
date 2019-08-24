@@ -1,0 +1,663 @@
+https://www.cnblogs.com/ljq66/p/9896578.html
+前言：公司用BABYLON作为主要的前端引擎，同事们在长时间的项目实践中摸索到有关BABYLON的学习路径和问题解决方法，这里只作为温故知新。
+
+ 
+
+一、快速学习BABYLON
+
+
+
+1. 阅读Babylon[基础教程](http://doc.babylonjs.com/babylon101/)
+2. 阅读[一些BABYLON的新特性](http://doc.babylonjs.com/features/)
+3. 阅读[代码片段](http://doc.babylonjs.com/samples)
+4. 一些[更深入的教程详解](http://doc.babylonjs.com/how_to/)
+5. [在游乐场玩耍](http://doc.babylonjs.com/playground/)
+
+
+二、需要掌握的基本技能
+
+
+
+1. engine,scene等创建，抗锯齿，像素比，深度缓冲区等配置项
+2. 灯光的创建，基本属性，作用域
+3. 相机的创建，基本属性，多相机的切换，绑定等
+4. 材质的创建，不同纹理类型等
+5. 场景中的元素，雾化，天空盒，阴影，地形图，世界坐标系，本地坐标系等
+6. 事件，actionManager,onPointerDownObservable,pick,pickWithRay,
+   onViewMatrixChangedObservable,onLightRemovedObservable等基本事件
+7. UI
+
+ 
+三、项目开发中遇到的一些问题及重点功能
+
+
+
+# 灯光
+//设置作用物体
+light.includedOnlyMeshes
+//设置排除物体
+light.excludedMeshes
+# 相机
+1、相机多个动画的正确顺序
+targetScreenOffet->target->beta->alpha->radius
+2、相机运动触发的事件 
+camera.onViewMatrixChangedObservable
+3、漫游相机定制跳跃转向碰撞等功能
+复制代码
+//有两种方法可以根据世界矢量进行碰撞位移
+//1.
+camera._collideWithWorld(camera.getFrontPosition(10).subtract(camera.position))
+//2.
+camera.cameraDirection.addInPlace(camera._transformedDirection);
+ 
+//如跳跃，则相对世界向上
+scene.activeCamera.cameraDirection.addInPlace(new BABYLON.Vector3(0, 4, 0));
+//重力回到地面
+camera._needMoveForGravity = true;
+//定制位移方向
+var speedXX=camera._computeLocalCameraSpeed()*(左右惯性因子*panel) 
+var speed=camera._computeLocalCameraSpeed()*(前后惯性因子*panel) 
+camera._localDirection.copyFromFloats(speedX, 0, speedZ);
+camera.getViewMatrix().invertToRef(camera._cameraTransformMatrix);
+BABYLON.Vector3.TransformNormalToRef(camera._localDirection, camera._cameraTransformMatrix, camera._transformedDirection);
+camera.cameraDirection.addInPlace(camera._transformedDirection);
+
+//定制旋转方向
+camera.rotation.x=(beta惯性因子*panel)
+camera.rotation.y=(alpha惯性因子*panel)
+复制代码
+ 
+# 重力
+复制代码
+//添加重力
+scene.gravity = new BABYLON.Vector3(0, -9.81, 0);
+camera.applyGravity = true;
+//添加碰撞
+scene.collisionsEnabled = true;
+camera.checkCollisions = true;
+ground.checkCollisions = true;
+box.checkCollisions = true;
+//相机碰撞椭圆体
+camera.ellipsoid = new BABYLON.Vector3(.5, 1, .5);
+//arcRotateCamera的碰撞椭圆体
+camera.collisionRadius =new BABYLON.Vector3(0.5, 0.5, 0.5)
+//防止向上跳后无法落地
+camera._needMoveForGravity = true;
+//物体碰撞
+mesh.moveWithCollisions(vec3);
+//使用webworker运行碰撞检测
+scene.workerCollisions = true|false
+复制代码
+## 第二视图
+复制代码
+var camera = new BABYLON.ArcRotateCamera("Camera", 0, 0, 0, BABYLON.Vector3.Zero(), scene);
+camera.setPosition();
+
+var followCamera = new BABYLON.FollowCamera("follow", new BABYLON.Vector3(400, 500, 1000), scene, ground)
+followCamera.radius = 0
+followCamera.heightOffset = 400;
+scene.activeCameras.push(followCamera);
+scene.activeCameras.push(camera);
+
+followCamera.viewport = new BABYLON.Viewport(0, 0, 0.3, 0.3)
+camera.viewport = new BABYLON.Viewport(0, 0.3, 1, 0.7)
+复制代码
+## 四元数转换为欧拉角
+sphere2.lookAt(sphere.position)
+camera.position=sphere2.position;
+camera.rotation.x=-sphere2.rotationQuaternion.toEulerAngles().x;
+camera.rotation.y=sphere2.rotationQuaternion.toEulerAngles().y+Math.PI;
+camera.rotation.z=sphere2.rotationQuaternion.toEulerAngles().z;
+
+## 漫游相机和旋转相机的转换
+旋转相机 -> 漫游相机
+复制代码
+var radiusv3 = pickInfo.pickedPoint
+var radius = radiusv3.length();
+var alpha = Math.acos(radiusv3.x / Math.sqrt(Math.pow(radiusv3.x, 2) + Math.pow(radiusv3.z, 2)));
+ if (radiusv3.z < 0) {
+      alpha = 2 * Math.PI - alpha;
+}
+var beta = Math.acos(radiusv3.y / radius);
+复制代码
+漫游相机-> 旋转相机
+复制代码
+var radiusv3 = zxz.camera2.position;
+var radius = radiusv3.length();
+var alpha = Math.acos(radiusv3.x / Math.sqrt(Math.pow(radiusv3.x, 2) + Math.pow(radiusv3.z, 2)));
+if (radiusv3.z < 0) {
+    alpha = 2 * Math.PI - alpha;
+}
+var beta = Math.acos(radiusv3.y / radius);
+复制代码
+ 
+
+# 材质
+
+1、材质特殊参数
+
+material.maxSimultaneousLights //最多可接受灯光个数，默认4个
+material.useLogarithmicDepth 
+material.needDepthPrePass      //深度判断
+material.transparencyMode=2;
+2、 dynamicTexture
+
+复制代码
+var dynamicTexture = new BABYLON.DynamicTexture("DynamicTexture", {width:50,height:50}, scene, true);
+dynamicTexture.hasAlpha = true;
+dynamicTexture.drawText(text, 10, 50, "bold 100px Arial", color , "transparent", true,true);
+
+var plane = new BABYLON.Mesh.CreatePlane("TextPlane", size, scene, true);
+plane.material = new BABYLON.StandardMaterial("TextPlaneMaterial", scene);
+plane.material.backFaceCulling = false;
+plane.material.specularColor = new BABYLON.Color3(0, 0, 0);
+plane.material.diffuseTexture = dynamicTexture;
+复制代码
+3、镜面反射材质
+
+Material.diffuseColor = new BABYLON.Color3(0.4, 0.4, 0.4);
+Material.reflectionTexture = new BABYLON.MirrorTexture("mirror", 1024, scene, true); //Create a mirror texture
+Material.reflectionTexture.mirrorPlane = new BABYLON.Plane(0, -1.0, 0, -10.0);
+Material.reflectionTexture.renderList = [ground,skybox];
+Material.reflectionTexture.level = 0.6;//Select the level (0.0 > 1.0) of the reflection
+4、 探针
+
+复制代码
+var box = BABYLON.Mesh.CreateBox("box", 5000, scene);
+//直接贴反射贴图
+//material.reflectionTexture = new BABYLON.CubeTexture('img/bg/4', scene);
+//box.material = new BABYLON.StandardMaterial("boxMaterial", scene);
+//box.material.reflectionTexture = new BABYLON.CubeTexture('img/bg/4', scene);
+//box.material.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+//box.material.backFaceCulling = false;
+//box.rotation.z = Math.PI / 2;
+
+var probe = new BABYLON.ReflectionProbe("main", 512, scene);
+probe.renderList.push(yellowSphere);
+probe.renderList.push(greenSphere); 
+probe.renderList.push(blueSphere); 
+probe.renderList.push(mirror); 
+mainMaterial.diffuseColor = new BABYLON.Color3(1, 0.5, 0.5); 
+mainMaterial.reflectionTexture = probe.cubeTexture;
+mainMaterial.reflectionFresnelParameters = new BABYLON.FresnelParameters();
+mainMaterial.reflectionFresnelParameters.bias = 0.02;
+复制代码
+5、 菲涅尔
+
+复制代码
+//所有菲涅尔类型
+StandardMaterial.diffuseFresnelParameters
+StandardMaterial.reflectionFresnelParameters
+StandardMaterial.opacityFresnelParameters
+StandardMaterial.emissiveFresnelParameters
+StandardMaterial.refractionFresnelParameters
+//用法
+var saturne = BABYLON.Mesh.CreateSphere("saturne", 16, 80, scene);
+var saturne_material = new BABYLON.StandardMaterial("saturne_material", scene);
+saturne_material.reflectionTexture = new BABYLON.CubeTexture("../../assets/skybox/nebula", scene);
+
+saturne_material.reflectionFresnelParameters = new BABYLON.FresnelParameters();
+saturne_material.reflectionFresnelParameters.bias = 0.2;
+
+saturne_material.emissiveFresnelParameters = new BABYLON.FresnelParameters();
+saturne_material.emissiveFresnelParameters.bias = 0.6;
+saturne_material.emissiveFresnelParameters.power = 4;
+saturne_material.emissiveFresnelParameters.leftColor = BABYLON.Color3.White();
+saturne_material.emissiveFresnelParameters.rightColor = new BABYLON.Color3(0.6, 0.6, 0.6);
+
+saturne.material = saturne_material;
+复制代码
+ 
+
+# 动画
+1. 创建animation对象
+
+var animation = new BABYLON.Animation(name, targetProperty, framePerSecond, dataType, loopMode, enableBlending);
+2. 绑定键值对
+
+animation.setKeys([{frame:0,value:0},...])
+3. 设置运动函数
+
+var bezierEase = new BABYLON.BezierCurveEase(.97, .2, 0, .58);
+bezierEase.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEOUT);
+animation.setEasingFunction(bezierEase);
+4. 将动画对象push到mesh的animations属性中
+
+mesh.parent.animations.push(animationPosition);
+5. 开始运行动画
+
+var animatable=beginAnimation(target, from, to, loop, speedRatio, onAnimationEnd, animatable)
+animatable.pause()   //暂停
+animatable.restart() //从暂停的地方开始播放
+animatable.stop()    //停止动画，不能恢复
+animatable.reset()   //重新开始，从0 frame的地方，不管循环模式
+** 注意:
+* bug ：从0到0 整个场景会抖动
+* 由3Dmax导入动画，直接开始运行，bug:如果scene.stopAnimation，下次begin一定要通过事件才能正常触发。
+* 就算没有给对象设置动画对象，但是开始运行动画了，也能通过scene.getAnimatableByTarget(mesh)获取到animatable对象(虽然animations为空数组)
+* 如果loop 设置为了ture，那么根据loopMode来进行循环，并且永远处于运动状态，不会触发onAnimationEnd回调函数，除非stopAnimation或者再运行一遍beginAnimation，
+或者使用 BABYLON.Animation.CreateAndStartAnimation(且使用ANIMATIONLOOPMODE_CONSTANT模式)
+* 如果loop设置为false,动画只执行一次，然后触发onAnimationEnd回调函数
+* 在动画运行过程中如果手动更新了animation.setKeys()，那么继续当前的动画且currentFrame不变，但是更新了keys，也就是跳到了新的keys的当前frame画面，所以会有一个突变的卡顿现象
+* 如果当前处于运动状态，又运行了一遍beginAnimation，那么会stopAnimation，并重置当前帧数，可以解决卡顿现象。
+* animatable.stop直接停止运动状态，restart结束暂停状态，不会变化位置，如果stop等停止了运动状态，restart无效，reset是直接回到动画刚开始的位置
+* createAndStartAnimation不会打断其他动画，但是beginAnimation会打断所有animation包括createAndStartAnimation
+* beginAnimation会打断createAndStartAnimation,createAndStartAnimation不会打断beginAnimation
+
+# 粒子
+
+复制代码
+1、发射方向类型
+particleSystem.particleEmitterType = new BABYLON.SphereParticleEmitter(10,false);
+//或者
+particleSystem.createSphereEmitter(10);//GPUParticle没有这个API
+
+2、子粒子，放烟花
+particleSystem.subEmitters = [particleSystem,..]
+
+3、members
+particleSystem.disposeOnStop=true;
+复制代码
+ 
+
+# mesh
+1、facet Data
+
+复制代码
+//获得三角形的中心
+mesh.getFacetPosition(faceId)
+
+//the 50th facet local position
+var localPositions = mesh.getFacetLocalPositions(); // returns the array of facet positions in the local space
+var localPos = localPositions[50]; 
+
+//normal
+var norm = mesh.getFacetNormal(faceId);
+
+//
+var localNormals = mesh.getFacetLocalNormals(); // returns the array of facet normals in the local space
+var localPos = localNormals[50]; // Vector3 : the 50th facet local position
+
+//All the methods dealing with the world coordinates use the mesh world matrix. As you may know, this matrix is automatically computed on the render call.
+If you've just moved, scaled or rotated your mesh before calling the facetData methods using the world values and you're not sure about this, you can ever force the world matrix computation.
+mesh.rotate.y += 0.2; // the mesh will be rotated on the next render call, but I need a rotated normal
+mesh.computeWorldMatrix(true); // force the world matrix computation
+var norm = mesh.getFacetNormal(50); // returns the world normal of the mesh 50th facet
+复制代码
+2、 获取轴心
+
+//如果之前有freeze矩阵，则需要先重新计算
+mesh.computeWorldMatrix(true)
+mesh.getAbsolutePivotPoint()
+3、设置本身轴偏差
+
+mesh.setPivotPoint(vec3)
+4、画线
+
+var lines=new BABYLON.Mesh.CreateLines("line",[v0,v1,v2,v3],scene)
+//画线默认是以gl.LINES方法绘画，例子中虽然只传入了4个顶点，但是默认0,1 1,2 2,3 
+//颜色：lines.color
+5、自定义geometry
+
+复制代码
+//简单的使用verticesData
+mesh.setVerticesData(kind:string,data:array,updatable:boolean,stride:number) 
+//demo:
+mesh.setVerticesData("position", positions, true)
+//stride :position,normal 默认3,uv 默认2
+//或者使用buffer,可以更多的配置offset,size,stride等选项
+mesh.setVerticesBuffer(new vertexBuffer(engine,data:array,kind:string,updatable:boolean,postponeInternalCreation:boolean,stride:number，instanced：Boolean，offset：number,size:number))
+//demo:
+var aRotation = new Float32Array(pointLength*2);
+mesh.setVerticesBuffer(new BABYLON.VertexBuffer(engine, aRotation, "aRotation", true, false, 2));
+//最后必须设置索引
+mesh.setIndices(Array)
+复制代码
+6、使用自定义的attribute传入着色器
+
+复制代码
+var material = new BABYLON.ShaderMaterial("particle", scene, "./js/particle",
+{
+  uniforms: ["worldViewProjection", "uTime", "uTranslation", "axis", "alpha", /*"resolution",*/ "pointSize", "baseColor", /*"rebuilding",*/ "status", "scatter", "uvMode", "mobile"],
+  attributes: ["position", "uv", "aRotation", "aAnimation", "raxis"],
+  needAlphaBlending:true //通过material.alphaMode=来设置混合模式
+});
+material.fillMode = 2;
+material.setFloat("uTime", 0.);
+material.setVector3("axis", new BABYLON.Vector3(0, 1, 0));
+material.setVector3("uTranslation", new BABYLON.Vector3(0, 500, 0));
+material.setColor3("baseColor", new BABYLON.Color3(1, 1, 1));
+material.setFloat("status", .5);
+material.setFloat("scatter", 0);
+material.setFloat("uvMode", 0); 
+复制代码
+7、一般用到的创建着色器程序的两种方法
+
+ View Code
+复制代码
+//方法一. BABYLON.Effect.ShadersStore["customVertexShader"]
+var shaderMaterial = new BABYLON.ShaderMaterial("shader", scene, {
+    vertex: "custom",
+    fragment: "custom",
+},
+{
+    attributes: ["position", "normal", "uv"],
+    uniforms: ["world", "worldView", "worldViewProjection", "view", "projection"]
+});
+复制代码
+复制代码
+//方法二.创建单独的文件basename.vertex.fx和basename.fragment.fx
+var cloudMaterial = new BABYLON.ShaderMaterial("cloud", scene, "./basename",
+{
+    attributes: ["position", "uv"],
+    uniforms: ["worldViewProjection"],
+    needAlphaBlending:true //通过material.alphaMode=来设置混合模式
+});
+复制代码
+ 
+
+## 传参方法
+
+setTexture，setFloat，setFloats，setColor3，setColor4，setVector2，setVector3，setVector4，setMatrix
+attributes: mesh.setVerticesBuffer(new BABYLON.VertexBuffer(engine, aRotation, "aRotation", true, false, 2));
+## BABYLON默认传入的参数
+
+1、自动传入的uniform变量
+
+world，
+view，
+projection，
+worldView，
+worldViewProjection
+cameraPosition
+2、自动传入的attribute变量
+
+position
+normal
+uv
+uv2
+## 通过索引创建submesh
+
+BABYLON.SubMesh.CreateFromIndices(subMesh.materialIndex, offset, Math.min(subdivisionSize, totalIndices - offset), mesh);
+## CSG
+
+复制代码
+union 相加
+subtract 相减`
+intersect 相交
+
+var sphereCSG = BABYLON.CSG.FromMesh(sphere);
+sphereCSG.subtractInPlace(BABYLON.CSG.FromMesh(cylinderMesh));
+sphereCSG.toMesh("bowling ball", sphere.material, scene, false);
+copyTransformAttributes(csg) 
+复制代码
+默认是源CSG的变换矩阵，如果需要改变，比如intersect的CSG，那么可以设置相交部分的CSG为变换矩阵，轴就在新建物体的原点
+
+## polygonMeshBuilder
+通过path2创建的polygon是动态创建的，会根据scaling来增加顶点
+
+
+# 场景
+1、自己创建天空盒
+
+复制代码
+var skybox = BABYLON.Mesh.CreateBox("skyBox", 100.0, scene);
+var skyboxMaterial = new BABYLON.StandardMaterial("skyBox", scene);
+skyboxMaterial.backFaceCulling = false;
+skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("../../Assets/skybox/skybox", scene);
+skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+skybox.material = skyboxMaterial;
+skybox.material.disableLighting = true;
+skybox.infiniteDistance = true;
+
+//天空盒模糊
+skyMaterial.roughness = 6;
+复制代码
+2、利用API创建场景天空盒，将作用于场景中所有的物体
+
+scene.environmentTexture=new BABYLON.CubeTexture("/assets/textures/SpecularHDR-env.dds");
+var envTexture = new BABYLON.CubeTexture("/assets/textures/SpecularHDR.dds", scene);
+scene.createDefaultSkybox(envTexture, pbr?:boolean, scale?:number,blur?:number);
+3、利用API生成默认场景
+
+复制代码
+var helper=scene.createDefaultEnvironment(opt);
+helper.setMainColor(BABYLON.Color3.Teal());
+
+opt:
+createGround: Specifies wether or not to create a ground.
+groundSize: Specifies the ground size (if sizeAuto is false).
+groundTexture: The texture used on the ground (Default to Babylon CDN).
+groundColor: The color mixed in the ground texture by default.
+enableGroundShadow: Enables the ground to receive shadows.
+groundShadowLevel: Helps preventing the shadow to be fully black on the ground.
+enableGroundMirror: Creates a mirror texture attach to the ground.
+createSkybox: Specifies wether or not to create a skybox.
+skyboxSize: Specifies the skybox size (if sizeAuto is false).
+skyboxTexture: The texture used on the skybox (Default to Babylon CDN).
+skyboxColor: The color mixed in the skybox texture by default.
+sizeAuto: Compute automatically the size of the elements to best fit with the scene.
+setupImageProcessing: Sets up the inmage processing in the scene.
+environmentTexture: The texture used as your environment texture in the scene (Default to Babylon CDN).
+cameraExposure: The value of the exposure to apply to the scene.
+cameraContrast: The value of the contrast to apply to the scene.
+toneMappingEnabled: Specifies wether or not tonemapping should be enabled in the scene.
+复制代码
+## 雾化
+
+scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
+scene.fogDensity = 0.02;
+scene.fogColor = scene.clearColor;
+material.fogEnabled;
+## 地形图
+
+BABYLON.Mesh.CreateGroundFromHeightMap("ground", "worldHeightMap.jpg", width:200, height:200, subdivision:250, minHeight:0, maxHeight:10, scene, updatable:false, onReady:successCallback);
+getHeightAtCoordinates(x,z)
+## 阴影
+
+复制代码
+var shadowGenerator=new BABYLON.ShadowGenerator(阴影贴图的大小：1024,light);
+//产生阴影的物体列表
+shadowGenerator.getShadowMap().renderList.push(box);
+
+//软化阴影
+//泊松抽样
+shadowGenerator.usePoissonSampling = true;
+//指数阴影贴图
+shadowGenerator.useExponentialShadowMap = true;
+shadowGenerator.depthScale=50
+//模糊指数阴影图
+shadowGenerator.useBlurExponentialShadowMap = true;
+//模糊质量
+shadowGenerator.useKernelBlur = true;
+shadowGenerator.blurScale = 1;
+shadowGenerator.blurKernel = 60;
+//接收阴影
+plane.receiveShadows=true;
+//阴影计算默认1秒60次，静态阴影改为1次就可以了;
+shadowGenerator.getShadowMap().refreshRate =BABYLON.RenderTargetTexture.REFRESHRATE_RENDER_ONCE //（0）We need to compute it just once
+//让灯不要重新计算阴影位置
+light.autoUpdateExtends = false;
+//取消泊松亮斑
+shadowGenerator.bias=0.001;
+//webGL2.0
+usePercentageCloserFiltering=true;
+复制代码
+
+## 世界坐标系 与 本地坐标系
+1. lookAt(vector)是以z轴指向vector这个点的位置，使用这个值后，会清零rotation,并将本地轴的信息存放在rotationQuaternion中。
+2. 本地轴默认为世界坐标系(左手坐标系).
+3. 若要使用本地坐标系，可以使用
+
+* position
+* rotation
+* translate(vector,distance,BABYLON.Space.LOCAL)
+* rotate(vector,distance,BABYLON.Space.LOCAL)
+4. 如果需要使用世界坐标系
+
+* rotate(vector,distance,BABYLON.Space.WORLD)
+* translate(vector,distance,BABYLON.Space.WORLD)
+5. 位移(position,translate)都是沿着世界坐标系或者父元素的本地坐标系进行位移，若要沿着自己的本地轴进行位移，则
+
+* locallyTranslate(vector)
+6. 如果设置了rotationQuaternion,那么本地轴存放在rotationQuaternion中（如果3DSMAX中导出轴不是世界坐标系，那么本地轴也存放在这里，否则的话这个值为undefined
+
+## 优化
+1. material.freeze();
+
+scene.freezeMaterials();
+冻结后，即使更改材质的属性，着色器也将保持不变。您将不得不解冻它来更新内部着色器：
+
+material.unfreeze();
+scene.unfreezeMaterials();
+2. 默认情况下，Babylon.js使用索引的网格，其中顶点可以由面部重用。当顶点重用率低时，如果顶点结构相当简单（就像一个位置和一个正常的），那么你可能需要展开顶点并停止使用索引
+
+mesh.convertToUnIndexedMesh();
+例如，这对于立方体来说非常有效，其中更有效地发送32个位置而不是24个位置和32个索引。
+
+
+3. 默认情况下，Babylon.js将适应设备比例，以便在高DPI设备上产生最佳质量。
+缺点是这可能会在低端设备上花费很多。您可以使用Engine构造函数的第四个参数关闭它：
+
+var engine = new BABYLON.Engine(canvas, antialiasing, null, false);
+我们也可以通过设置精度来降低FPS消耗
+
+engine.setHardwareScalingLevel(1~10)
+4. BABYLON.SceneOptimizer.OptimizeAsync(scene)；
+等同于：
+
+BABYLON.SceneOptimizer.OptimizeAsync(scene, BABYLON.SceneOptimizerOptions.ModerateDegradationAllowed(),
+function() {
+// On success
+}, function() {
+// FPS target not reached
+})
+5. 当mesh的顶点数量太多，检测碰撞时候最好开启子网格，子网格进行检测
+
+复制代码
+mesh.subdivide(x)
+mesh.createOrUpdateSubmeshesOctree(capacity, maxDepth)
+mesh.useOctreeForCollisions
+mesh.useOctreeForPicking
+mesh.useOctreeForRenderingSelection
+//var octree=scene.createOrUpdateSelectionOctree();
+//for(var i=0;i<scene.meshes.length;i++){
+// octree.dynamicContent.push(scene.meshes[i])
+//}
+复制代码
+6.createInstance();
+
+synchronizeInstances()
+实例对象的LOD继承sourceMesh的LOD
+
+
+7.LOD
+LOD的对象不管原来的位置，旋转是什么，都以sourceMesh的位置，旋转为准。
+
+addLODLevel();
+8.简化网格，生成不同faces的LOD
+
+simplify(settings, parallelProcessing, simplificationType, successCallback) → void
+//scene.meshes[0].simplify([{ quality: 0.1, distance: 10000 }],
+// true, BABYLON.SimplificationType.QUADRATIC, function() {
+// alert("LOD finisehd, let's have a beer!");
+// });
+## 广告板
+
+plane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_Y;
+## 判断是否为手机
+
+复制代码
+var os = function() {
+     var ua = navigator.userAgent,
+     isWindowsPhone = /(?:Windows Phone)/.test(ua),
+     isSymbian = /(?:SymbianOS)/.test(ua) || isWindowsPhone,
+     isAndroid = /(?:Android)/.test(ua),
+     isFireFox = /(?:Firefox)/.test(ua),
+     isChrome = /(?:Chrome|CriOS)/.test(ua),
+     isTablet = /(?:iPad|PlayBook)/.test(ua) || (isAndroid && !/(?:Mobile)/.test(ua)) 
+ || (isFireFox && /(?:Tablet)/.test(ua)),
+     isPhone = /(?:iPhone)/.test(ua) && !isTablet,
+     isPc = !isPhone && !isAndroid && !isSymbian;
+return {
+     isTablet: isTablet,
+     isPhone: isPhone,
+     isAndroid : isAndroid,
+     isPc : isPc
+   };
+}();
+复制代码
+## actionManager
+
+复制代码
+1.mesh.actionManager = new BABYLON.ActionManager(scene);
+2.mesh.actionManager.registerAction(new BABYLON.InterpolateValueAction(BABYLON.ActionManager.OnPickTrigger, light, "diffuse", BABYLON.Color3.Black(), 1000));
+3.mesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPointerOverTrigger, function(){
+}))
+actionmanager{
+additionalData:
+source:
+pointerX:
+pointerY:
+sourceEvent:
+}
+复制代码
+## onPointerObservable
+
+复制代码
+scene.onPointerObservable.add(function(e){
+    e.type:1,
+    //1.onmousedown
+    //2:onmouseup
+    //4:onmousemove
+    e.event:sourceevent,
+
+    e.pickInfo:{
+          hit:
+          pickedMesh:
+          pickedPoint:vec3
+    }
+})
+复制代码
+## 辉光
+
+//mainTextureRatio略微调大点，解决辉光闪烁
+var hl = new BABYLON.HighlightLayer("dianchiMat", scene, {mainTextureRatio: 1.5});
+### toDataURL
+
+//先进行设置
+var engine = new BABYLON.Engine(canvas, antialiasing, {
+preserveDrawingBuffer: true,
+}, false);
+canvas.toDateURL();
+## GUI
+
+复制代码
+var gui = BABYLON.GUI.AdvancedDynamicTexture.CreateForMesh(plane, 1024, 1024, false);
+var control = new BABYLON.GUI.Image(plane.name + "_gui", "img/function/" + (index + 1) + ".png");
+gui.addControl(control)
+control.width
+usableWidth = width - paddingLeft - paddingRight
+control.left
+control.top
+复制代码
+## 获取模型的在画布上面的二维坐标
+
+var mesh2d = BABYLON.Vector3.Project(mesh.position,
+BABYLON.Matrix.Identity(),
+scene.getTransformMatrix(),
+camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()));
+console.log(mesh2d.y)
+console.log(mesh2d.x)
+在最小宽度为760所以小于760的尺寸如移动端 必须使用百分比获取坐标
+
+var mesh2d = BABYLON.Vector3.Project(mesh.position,
+BABYLON.Matrix.Identity(),
+scene.getTransformMatrix(),
+camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()));
+console.log(mesh2d.y/engine.getRenderHeight()*100+"%")
+console.log(mesh2d.x/engine.getRenderWidth()*100+"%")
+var options = new BABYLON.SceneOptimizerOptions(50, 2000);
+options.addOptimization(new BABYLON.HardwareScalingOptimization(0, 1));
